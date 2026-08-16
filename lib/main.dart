@@ -253,31 +253,96 @@ class AccountsPage extends StatelessWidget {
 }
 
 class ReportsPage extends StatelessWidget {
-  final FinanceStore store; const ReportsPage({super.key,required this.store});
-  @override Widget build(BuildContext context){
-    final now=DateTime.now();
-    final map=<String,double>{};
-    for(final t in store.transactions){
-      final d=DateTime.tryParse(t['date']??'');
-      if(d!=null&&d.year==now.year&&d.month==now.month&&t['type']=='Expense') map[t['category']??'Other']=(map[t['category']??'Other']??0)+(t['amount']??0).toDouble();
+  final FinanceStore store;
+  const ReportsPage({super.key, required this.store});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final Map<String, double> expenseMap = {};
+
+    for (final t in store.transactions) {
+      final d = DateTime.tryParse(t['date'] ?? '');
+      if (d != null &&
+          d.year == now.year &&
+          d.month == now.month &&
+          t['type'] == 'Expense') {
+        final category = t['category'] ?? 'Other';
+        final amount = (t['amount'] ?? 0).toDouble();
+        expenseMap[category] = (expenseMap[category] ?? 0.0) + amount;
+      }
     }
-    final entries=map.entries.toList()..sort((a,b)=>b.value.compareTo(a.value));
-    final total=entries.fold(0.0,(s,e)=>s+e.value);
-    return ListView(padding:const EdgeInsets.fromLTRB(16,20,16,40),children:[
-      const Text('Reports',style:TextStyle(fontSize:28,fontWeight:FontWeight.w800)),
-      const SizedBox(height:6),Text(DateFormat('MMMM yyyy').format(now),style:TextStyle(color:Colors.grey.shade600)),
-      const SizedBox(height:18),
-      Card(elevation:0,child:Padding(padding:const EdgeInsets.all(18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        const Text('Expense analysis',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
-        const SizedBox(height:4),Text('Total ${money(total)}'),
-        const SizedBox(height:16),
-        if(entries.isEmpty) const Text('No expenses this month.')
-        else ...entries.map((e){final pct=total==0?0:e.value/total;return Padding(padding:const EdgeInsets.only(bottom:14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          Row(children:[Expanded(child:Text(e.key)),Text(money(e.value),style:const TextStyle(fontWeight:FontWeight.bold))]),
-          const SizedBox(height:5),LinearProgressIndicator(value:pct,minHeight:8),const SizedBox(height:2),Text('${(pct*100).toStringAsFixed(1)}%',style:TextStyle(fontSize:11,color:Colors.grey.shade600))
-        ]);})
-      ])))
-    ]);
+
+    final entries = expenseMap.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final total = entries.fold<double>(0.0, (sum, e) => sum + e.value);
+
+    final expenseWidgets = entries.map<Widget>((e) {
+      final double pct = total == 0.0 ? 0.0 : e.value / total;
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text(e.key)),
+                Text(
+                  money(e.value),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            LinearProgressIndicator(value: pct, minHeight: 8),
+            const SizedBox(height: 2),
+            Text(
+              '${(pct * 100).toStringAsFixed(1)}%',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      );
+    }).toList();
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+      children: [
+        const Text(
+          'Reports',
+          style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          DateFormat('MMMM yyyy').format(now),
+          style: TextStyle(color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 18),
+        Card(
+          elevation: 0,
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Expense analysis',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text('Total ${money(total)}'),
+                const SizedBox(height: 16),
+                if (entries.isEmpty)
+                  const Text('No expenses this month.')
+                else
+                  ...expenseWidgets,
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
