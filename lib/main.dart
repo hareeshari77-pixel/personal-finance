@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,51 @@ class FinanceStore extends ChangeNotifier {
     transactions = _decodeList(p.getString('transactions'));
     final c = p.getStringList('categories');
     if (c != null && c.isNotEmpty) categories = c;
+
+    // One-time migration of the user's existing Excel history.
+    // Only runs when the app has no existing local transactions.
+    if (transactions.isEmpty && p.getBool('excelImportV1Done') != true) {
+      try {
+        final raw = await rootBundle.loadString('assets/excel_import.json');
+        final data = jsonDecode(raw) as Map<String, dynamic>;
+
+        final importedAccounts =
+            List<Map<String, dynamic>>.from((data['accounts'] as List).map(
+          (e) => Map<String, dynamic>.from(e as Map),
+        ));
+
+        final accountIds = <String, String>{};
+        for (final a in importedAccounts) {
+          final id = a['id'].toString();
+          final name = a['name'].toString();
+          accountIds[name] = id;
+        }
+
+        accounts = importedAccounts;
+
+        final importedTransactions =
+            List<Map<String, dynamic>>.from((data['transactions'] as List).map(
+          (e) => Map<String, dynamic>.from(e as Map),
+        ));
+
+        transactions = importedTransactions.map((t) {
+          final copy = Map<String, dynamic>.from(t);
+          final accountKey = copy.remove('accountKey')?.toString() ?? '';
+          copy['accountId'] = accountIds[accountKey];
+          return copy;
+        }).where((t) => t['accountId'] != null).toList();
+
+        final importedCategories = List<String>.from(
+          (data['categories'] as List).map((e) => e.toString()),
+        );
+        categories = {...categories, ...importedCategories}.toList();
+
+        await p.setBool('excelImportV1Done', true);
+        await save();
+      } catch (_) {
+        // Keep the app usable even if an import asset is unavailable.
+      }
+    }
   }
 
   List<Map<String,dynamic>> _decodeList(String? s) {
@@ -71,10 +117,15 @@ class FinanceStore extends ChangeNotifier {
     for (final t in transactions.where((x)=>x['accountId']==id)) {
       final type=t['type'];
       final amount=(t['amount'] ?? 0).toDouble();
-      if (type=='Income') v += amount;
-      else if (type=='Expense') v -= amount;
-      else if (type=='Investment') v -= amount;
-      else if (type=='Transfer') v += (t['direction']=='in' ? amount : -amount);
+      if (type=='Income') {
+        v += amount;
+      } else if (type=='Expense') {
+        v -= amount;
+      } else if (type=='Investment' || type=='Others') {
+        v += (t['flow']=='in' ? amount : -amount);
+      } else if (type=='Transfer') {
+        v += (t['direction']=='in' || t['flow']=='in' ? amount : -amount);
+      }
     }
     return v;
   }
